@@ -12,28 +12,26 @@ import androidx.health.connect.client.records.HeartRateRecord
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var healthConnectClient: HealthConnectClient
-    private lateinit var textoEstado: TextView
+    private lateinit var estado: TextView
 
-    private val permissions = setOf(
+    private val permisos = setOf(
         HealthPermission.getReadPermission(HeartRateRecord::class)
     )
 
-    private val requestPermissionsLauncher =
+    private val solicitarPermisos =
         registerForActivityResult(
             PermissionController.createRequestPermissionResultContract()
-        ) { grantedPermissions ->
-            if (grantedPermissions.containsAll(permissions)) {
-                textoEstado.text = "✅ Permiso concedido"
+        ) { permisosConcedidos ->
+
+            if (permisosConcedidos.containsAll(permisos)) {
+                estado.text = "✅ Permiso concedido\nYa podemos leer tus latidos."
             } else {
-                textoEstado.text = "❌ Permiso no concedido"
+                estado.text = "❌ No se concedió el permiso."
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        healthConnectClient = HealthConnectClient.getOrCreate(this)
 
         val layout = LinearLayout(this)
         layout.orientation = LinearLayout.VERTICAL
@@ -43,26 +41,53 @@ class MainActivity : ComponentActivity() {
         titulo.text = "Latidos ❤️"
         titulo.textSize = 30f
 
-        textoEstado = TextView(this)
-        textoEstado.text = "Necesitamos permiso para leer tu frecuencia cardíaca."
-        textoEstado.textSize = 18f
-        textoEstado.setPadding(0, 40, 0, 40)
+        estado = TextView(this)
+        estado.textSize = 18f
+        estado.setPadding(0, 40, 0, 40)
 
         val boton = Button(this)
-        boton.text = "Dar permiso a Health Connect"
+        boton.text = "Comprobar Health Connect"
 
         boton.setOnClickListener {
-            solicitarPermiso()
+            comprobarHealthConnect()
         }
 
         layout.addView(titulo)
-        layout.addView(textoEstado)
+        layout.addView(estado)
         layout.addView(boton)
 
         setContentView(layout)
+
+        comprobarHealthConnect()
     }
 
-    private fun solicitarPermiso() {
-        requestPermissionsLauncher.launch(permissions)
+    private fun comprobarHealthConnect() {
+
+        val disponibilidad = HealthConnectClient.getSdkStatus(this)
+
+        when (disponibilidad) {
+
+            HealthConnectClient.SDK_AVAILABLE -> {
+                estado.text =
+                    "🟢 Health Connect está disponible.\n\nPulsa el botón para solicitar permiso."
+
+                solicitarPermisos.launch(permisos)
+            }
+
+            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
+                estado.text =
+                    "🟡 Health Connect necesita actualizarse."
+            }
+
+            HealthConnectClient.SDK_UNAVAILABLE -> {
+                estado.text =
+                    "🔴 Health Connect no está disponible en este teléfono."
+            }
+
+            else -> {
+                estado.text =
+                    "⚠️ Estado desconocido de Health Connect."
+            }
+        }
     }
 }
