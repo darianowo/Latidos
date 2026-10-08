@@ -1,11 +1,12 @@
 package com.latidos.app
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -14,13 +15,23 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import java.time.Instant
 import java.time.Duration
+import java.time.Instant
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var estado: TextView
     private lateinit var bpmTexto: TextView
+
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val actualizarAutomaticamente = object : Runnable {
+        override fun run() {
+            leerLatidos()
+
+            handler.postDelayed(this, 120_000)
+        }
+    }
 
     private val permisos = setOf(
         HealthPermission.getReadPermission(HeartRateRecord::class)
@@ -84,34 +95,37 @@ class MainActivity : ComponentActivity() {
         comprobarHealthConnect()
     }
 
+    override fun onResume() {
+        super.onResume()
+
+        handler.post(actualizarAutomaticamente)
+    }
+
+    override fun onPause() {
+        super.onPause()
+
+        handler.removeCallbacks(actualizarAutomaticamente)
+    }
+
     private fun comprobarHealthConnect() {
 
         when (HealthConnectClient.getSdkStatus(this)) {
 
             HealthConnectClient.SDK_AVAILABLE -> {
-
-                estado.text =
-                    "🟢 Health Connect disponible"
-
+                estado.text = "🟢 Health Connect disponible"
                 comprobarPermiso()
             }
 
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-
-                estado.text =
-                    "🟡 Health Connect necesita actualizarse"
+                estado.text = "🟡 Health Connect necesita actualizarse"
             }
 
             HealthConnectClient.SDK_UNAVAILABLE -> {
-
-                estado.text =
-                    "🔴 Health Connect no está disponible"
+                estado.text = "🔴 Health Connect no está disponible"
             }
 
             else -> {
-
-                estado.text =
-                    "⚠️ Estado desconocido"
+                estado.text = "⚠️ Estado desconocido"
             }
         }
     }
@@ -175,11 +189,10 @@ class MainActivity : ComponentActivity() {
 
                 if (muestras.isEmpty()) {
 
-                    bpmTexto.text =
-                        "❤️ -- BPM"
+                    bpmTexto.text = "❤️ -- BPM"
 
                     estado.text =
-                        "⚠️ No encontramos latidos en Health Connect"
+                        "⚠️ No encontramos latidos"
 
                     return@launch
                 }
@@ -193,14 +206,11 @@ class MainActivity : ComponentActivity() {
                         "❤️ ${ultimaMuestra.beatsPerMinute} BPM"
 
                     estado.text =
-                        "🟢 Último latido encontrado"
+                        "🟢 Actualizado automáticamente"
 
                 }
 
             } catch (e: Exception) {
-
-                bpmTexto.text =
-                    "❤️ -- BPM"
 
                 estado.text =
                     "❌ Error: ${e.message}"
