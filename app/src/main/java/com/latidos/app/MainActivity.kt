@@ -5,14 +5,22 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.Duration
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var estado: TextView
+    private lateinit var bpmTexto: TextView
 
     private val permisos = setOf(
         HealthPermission.getReadPermission(HeartRateRecord::class)
@@ -25,6 +33,7 @@ class MainActivity : ComponentActivity() {
 
             if (permisosConcedidos.containsAll(permisos)) {
                 estado.text = "✅ Permiso concedido"
+                leerLatidos()
             } else {
                 estado.text = "❌ Permiso no concedido"
             }
@@ -41,21 +50,34 @@ class MainActivity : ComponentActivity() {
         titulo.text = "Latidos ❤️"
         titulo.textSize = 30f
 
+        bpmTexto = TextView(this)
+        bpmTexto.text = "❤️ -- BPM"
+        bpmTexto.textSize = 42f
+        bpmTexto.setPadding(0, 60, 0, 40)
+
         estado = TextView(this)
         estado.text = "Comprobando Health Connect..."
         estado.textSize = 18f
-        estado.setPadding(0, 40, 0, 40)
 
-        val boton = Button(this)
-        boton.text = "Dar permiso a Health Connect"
+        val botonPermiso = Button(this)
+        botonPermiso.text = "Dar permiso a Health Connect"
 
-        boton.setOnClickListener {
+        botonPermiso.setOnClickListener {
             solicitarPermisos.launch(permisos)
         }
 
+        val botonActualizar = Button(this)
+        botonActualizar.text = "Actualizar ❤️"
+
+        botonActualizar.setOnClickListener {
+            leerLatidos()
+        }
+
         layout.addView(titulo)
+        layout.addView(bpmTexto)
         layout.addView(estado)
-        layout.addView(boton)
+        layout.addView(botonPermiso)
+        layout.addView(botonActualizar)
 
         setContentView(layout)
 
@@ -63,26 +85,125 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun comprobarHealthConnect() {
+
         when (HealthConnectClient.getSdkStatus(this)) {
 
             HealthConnectClient.SDK_AVAILABLE -> {
+
                 estado.text =
-                    "🟢 Health Connect disponible.\nPulsa el botón."
+                    "🟢 Health Connect disponible"
+
+                comprobarPermiso()
             }
 
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
+
                 estado.text =
-                    "🟡 Health Connect necesita actualizarse."
+                    "🟡 Health Connect necesita actualizarse"
             }
 
             HealthConnectClient.SDK_UNAVAILABLE -> {
+
                 estado.text =
-                    "🔴 Health Connect no está disponible."
+                    "🔴 Health Connect no está disponible"
             }
 
             else -> {
+
                 estado.text =
-                    "⚠️ Estado desconocido."
+                    "⚠️ Estado desconocido"
+            }
+        }
+    }
+
+    private fun comprobarPermiso() {
+
+        lifecycleScope.launch {
+
+            val healthConnectClient =
+                HealthConnectClient.getOrCreate(this@MainActivity)
+
+            val permisosConcedidos =
+                healthConnectClient.permissionController
+                    .getGrantedPermissions()
+
+            if (permisosConcedidos.containsAll(permisos)) {
+
+                estado.text =
+                    "🟢 Permiso concedido. Leyendo latidos..."
+
+                leerLatidos()
+
+            } else {
+
+                estado.text =
+                    "🟡 Falta dar permiso"
+            }
+        }
+    }
+
+    private fun leerLatidos() {
+
+        lifecycleScope.launch {
+
+            try {
+
+                val healthConnectClient =
+                    HealthConnectClient.getOrCreate(this@MainActivity)
+
+                val ahora = Instant.now()
+
+                val hace24Horas =
+                    ahora.minus(Duration.ofHours(24))
+
+                val respuesta =
+                    healthConnectClient.readRecords(
+                        ReadRecordsRequest(
+                            recordType = HeartRateRecord::class,
+                            timeRangeFilter =
+                                TimeRangeFilter.between(
+                                    hace24Horas,
+                                    ahora
+                                )
+                        )
+                    )
+
+                val muestras =
+                    respuesta.records.flatMap { record ->
+                        record.samples
+                    }
+
+                if (muestras.isEmpty()) {
+
+                    bpmTexto.text =
+                        "❤️ -- BPM"
+
+                    estado.text =
+                        "⚠️ No encontramos latidos en Health Connect"
+
+                    return@launch
+                }
+
+                val ultimaMuestra =
+                    muestras.maxByOrNull { it.time }
+
+                if (ultimaMuestra != null) {
+
+                    bpmTexto.text =
+                        "❤️ ${ultimaMuestra.beatsPerMinute} BPM"
+
+                    estado.text =
+                        "🟢 Último latido encontrado"
+
+                }
+
+            } catch (e: Exception) {
+
+                bpmTexto.text =
+                    "❤️ -- BPM"
+
+                estado.text =
+                    "❌ Error: ${e.message}"
             }
         }
     }
