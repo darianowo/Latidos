@@ -1,93 +1,38 @@
-package com.latidos.app
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-import android.os.Bundle
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.activity.ComponentActivity
-import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.PermissionController
-import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.HeartRateRecord
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
 
-class MainActivity : ComponentActivity() {
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
-    private lateinit var estado: TextView
+    <application
+        android:allowBackup="true"
+        android:label="Latidos ❤️"
+        android:supportsRtl="true">
 
-    private val permisos = setOf(
-        HealthPermission.getReadPermission(HeartRateRecord::class)
-    )
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
 
-    private val solicitarPermisos =
-        registerForActivityResult(
-            PermissionController.createRequestPermissionResultContract()
-        ) { permisosConcedidos ->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
 
-            if (permisosConcedidos.containsAll(permisos)) {
-                estado.text = "✅ Permiso concedido\nYa podemos leer tus latidos."
-            } else {
-                estado.text = "❌ No se concedió el permiso."
-            }
-        }
+        </activity>
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        <activity
+            android:name=".PermissionsRationaleActivity"
+            android:exported="true">
 
-        val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(40, 80, 40, 40)
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
 
-        val titulo = TextView(this)
-        titulo.text = "Latidos ❤️"
-        titulo.textSize = 30f
+        </activity>
 
-        estado = TextView(this)
-        estado.textSize = 18f
-        estado.setPadding(0, 40, 0, 40)
+    </application>
 
-        val boton = Button(this)
-        boton.text = "Comprobar Health Connect"
-
-        boton.setOnClickListener {
-            comprobarHealthConnect()
-        }
-
-        layout.addView(titulo)
-        layout.addView(estado)
-        layout.addView(boton)
-
-        setContentView(layout)
-
-        comprobarHealthConnect()
-    }
-
-    private fun comprobarHealthConnect() {
-
-        val disponibilidad = HealthConnectClient.getSdkStatus(this)
-
-        when (disponibilidad) {
-
-            HealthConnectClient.SDK_AVAILABLE -> {
-                estado.text =
-                    "🟢 Health Connect está disponible.\n\nPulsa el botón para solicitar permiso."
-
-                solicitarPermisos.launch(permisos)
-            }
-
-            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                estado.text =
-                    "🟡 Health Connect necesita actualizarse."
-            }
-
-            HealthConnectClient.SDK_UNAVAILABLE -> {
-                estado.text =
-                    "🔴 Health Connect no está disponible en este teléfono."
-            }
-
-            else -> {
-                estado.text =
-                    "⚠️ Estado desconocido de Health Connect."
-            }
-        }
-    }
-}
+</manifest>
