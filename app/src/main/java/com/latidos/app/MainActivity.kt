@@ -17,6 +17,8 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
 
@@ -28,7 +30,6 @@ class MainActivity : ComponentActivity() {
     private val actualizarAutomaticamente = object : Runnable {
         override fun run() {
             leerLatidos()
-
             handler.postDelayed(this, 120_000)
         }
     }
@@ -97,13 +98,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-
         handler.post(actualizarAutomaticamente)
     }
 
     override fun onPause() {
         super.onPause()
-
         handler.removeCallbacks(actualizarAutomaticamente)
     }
 
@@ -134,24 +133,17 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
 
-            val healthConnectClient =
+            val client =
                 HealthConnectClient.getOrCreate(this@MainActivity)
 
-            val permisosConcedidos =
-                healthConnectClient.permissionController
-                    .getGrantedPermissions()
+            val concedidos =
+                client.permissionController.getGrantedPermissions()
 
-            if (permisosConcedidos.containsAll(permisos)) {
-
-                estado.text =
-                    "🟢 Permiso concedido. Leyendo latidos..."
-
+            if (concedidos.containsAll(permisos)) {
+                estado.text = "🟢 Permiso concedido"
                 leerLatidos()
-
             } else {
-
-                estado.text =
-                    "🟡 Falta dar permiso"
+                estado.text = "🟡 Falta dar permiso"
             }
         }
     }
@@ -162,55 +154,71 @@ class MainActivity : ComponentActivity() {
 
             try {
 
-                val healthConnectClient =
+                val client =
                     HealthConnectClient.getOrCreate(this@MainActivity)
 
                 val ahora = Instant.now()
+                val inicio = ahora.minus(Duration.ofHours(24))
 
-                val hace24Horas =
-                    ahora.minus(Duration.ofHours(24))
+                var pageToken: String? = null
+                val todasLasMuestras = mutableListOf<HeartRateRecord.Sample>()
 
-                val respuesta =
-                    healthConnectClient.readRecords(
-                        ReadRecordsRequest(
-                            recordType = HeartRateRecord::class,
-                            timeRangeFilter =
-                                TimeRangeFilter.between(
-                                    hace24Horas,
-                                    ahora
-                                )
+                do {
+
+                    val respuesta =
+                        client.readRecords(
+                            ReadRecordsRequest(
+                                recordType = HeartRateRecord::class,
+                                timeRangeFilter =
+                                    TimeRangeFilter.between(
+                                        inicio,
+                                        ahora
+                                    ),
+                                pageToken = pageToken
+                            )
                         )
-                    )
 
-                val muestras =
-                    respuesta.records.flatMap { record ->
-                        record.samples
+                    for (registro in respuesta.records) {
+                        todasLasMuestras.addAll(registro.samples)
                     }
 
-                if (muestras.isEmpty()) {
+                    pageToken = respuesta.pageToken
+
+                } while (!pageToken.isNullOrEmpty())
+
+                if (todasLasMuestras.isEmpty()) {
 
                     bpmTexto.text = "❤️ -- BPM"
 
                     estado.text =
-                        "⚠️ No encontramos latidos"
+                        "⚠️ No hay latidos en Health Connect"
 
                     return@launch
                 }
 
-                val ultimaMuestra =
-                    muestras.maxByOrNull { it.time }
+                val ultima =
+                    todasLasMuestras.maxByOrNull { it.time }
 
-                if (ultimaMuestra != null) {
+                if (ultima != null) {
+
+                    val hora =
+                        ultima.time
+                            .atZone(ZoneId.systemDefault())
+                            .format(
+                                DateTimeFormatter.ofPattern("HH:mm:ss")
+                            )
 
                     bpmTexto.text =
-                        "❤️ ${ultimaMuestra.beatsPerMinute} BPM"
+                        "❤️ ${ultima.beatsPerMinute} BPM"
 
                     estado.text =
-                        "🟢 Actualizado automáticamente"
+                        "🕐 Dato de Health Connect: $hora"
 
                 }
 
             } catch (e: Exception) {
+
+                bpmTexto.text = "❤️ -- BPM"
 
                 estado.text =
                     "❌ Error: ${e.message}"
